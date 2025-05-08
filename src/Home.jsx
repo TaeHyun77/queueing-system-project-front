@@ -1,174 +1,181 @@
 import React, { useState, useEffect } from 'react';
-import axios from "axios";
+import { useNavigate, useLocation } from 'react-router-dom';
 import './Home.css';
 
+const serverURL = 'http://localhost:8080';
+
 const Home = () => {
-  const [name, setName] = useState('');
-  const [showButton, setShowButton] = useState(false);
-  const [isWaiting, setIsWaiting] = useState(false);
-  const [ranking, setRanking] = useState(null); // 순위 상태 추가
+    const [userId, setUserId] = useState('');
+    const [showButton, setShowButton] = useState(false);
+    const [isWaiting, setIsWaiting] = useState(false);
+    const [ranking, setRanking] = useState(null);
+    const [confirmed, setConfirmed] = useState(false);
+    const navigate = useNavigate()
+    const location = useLocation();
 
-  const registerUser = async (userId, queueType = 'reserve') => {
-    try {
-      const response = await axios.post(
-        'http://localhost:8080/user/enter',
-        null,
-        {
-          params: {
-            user_id: userId,
-            queueType: queueType
-          }
+    // 숫자만 입력하도록 ( 임시 )
+    const handleChange = (e) => {
+        const value = e.target.value;
+        if (/^\d*$/.test(value)) {
+            setUserId(value);
+            setShowButton(value.trim().length > 0);
         }
-      );
-      console.log("대기열 등록 성공");
-    } catch (error) {
-        if (error.response && error.response.status === 400) {
-          throw new Error("이미 대기열에 등록된 사용자입니다.");
-        } else {
-          throw new Error("서버 오류가 발생했습니다.");
-        }
-      }
-  };
-
-  const checkUserRanking = async (userId, queueType = 'reserve') => {
-    try {
-      const response = await axios.get(
-        'http://localhost:8080/user/search/ranking',
-        {
-          params: {
-            user_id: userId,
-            queueType: queueType
-          }
-        }
-      );
-
-      if (ranking !== response.data) {
-        setRanking(response.data);  // 값이 달라질 때만 상태 업데이트
-      }
-
-      console.log(`${userId}님의 순위: ${response.data}`);
-      setRanking(response.data); 
-    } catch (error) {
-      console.error('사용자 순위 조회 중 에러:', error);
-    }
-  };
-
-  const cancelUserWaiting = async (userId, queueType = 'reserve') => {
-    try {
-      const response = await axios.delete(
-        'http://localhost:8080/user/cancel',
-        {
-          params: {
-            user_id: userId,
-            queueType: queueType
-          }
-        }
-      );
-  
-      if (response.status === 200) {
-        console.log("취소 성공");
-        return true;
-      } else {
-        console.warn("예상치 못한 응답 코드:", response.status);
-        return false;
-      }
-  
-    } catch (error) {
-      if (error.response && error.response.status === 400) {
-        throw new Error("대기열에 등록되지 않은 사용자입니다.");
-      } else {
-        throw new Error("서버 오류가 발생했습니다.");
-      }
-    }
-  };
-  
-  const handleChange = (e) => {
-    const value = e.target.value;
-    if (/^\d*$/.test(value)) {
-      setName(value);
-      setShowButton(value.trim().length > 0);
-    }
-  };
-
-  const handleReservation = async () => {
-    const check = window.confirm("대기열에 참여하시겠습니까 ?");
-    if (!check) return;
-
-    try {
-      await registerUser(name);
-      alert(`${name}님, 대기열 등록이 완료되었습니다!`);
-      await checkUserRanking(name); 
-      setIsWaiting(true);
-    } catch (error) {
-      alert('이미 등록된 사용자입니다.');
-    }
-  };
-
-  const handleCancel = async () => {
-    const confirmCancel = window.confirm("정말로 대기열에서 취소하시겠습니까?");
-    if (!confirmCancel) return;
-  
-    try {
-      await cancelUserWaiting(name);
-      alert(`${name}님, 대기열에서 성공적으로 취소되었습니다.`);
-    } catch (error) {
-      alert(error.message);
-    } finally {
-      setIsWaiting(false);
-      setName('');
-      setRanking(null);
-      setShowButton(false);
-    }
-  };
-
-  useEffect(() => {
-    let interval;
-
-    if (isWaiting && name) {
-      interval = setInterval(() => {
-        checkUserRanking(name); 
-      }, 2000); // 5초마다 갱신
-    }
-
-    return () => {
-      if (interval) clearInterval(interval); // 언마운트 시 정리
     };
-  }, [isWaiting, name]);
-  
 
-  // 대기 화면
-  if (isWaiting) {
+    const registerUser = async () => {
+        const confirm = window.confirm("대기열에서 참여하시겠습니까 ?");
+        if (!confirm) return;
+
+        try {
+            const res = await fetch(`${serverURL}/user/enter?user_id=${userId}&queueType=reserve`, {
+                method: 'POST',
+            });
+
+            if (!res.ok) throw new Error("이미 등록된 사용자이거나 오류 발생");
+            alert(`${userId}님, 대기열 등록 완료!`);
+            setIsWaiting(true);
+        } catch (err) {
+            alert(err.message);
+        }
+    };
+
+    const cancelUser = async () => {
+        const confirm = window.confirm("대기열에서 취소하시겠습니까?");
+        if (!confirm) return;
+
+        try {
+            const res = await fetch(`${serverURL}/user/cancel?user_id=${userId}&queueType=reserve`, {
+                method: 'DELETE',
+            });
+
+            if (res.ok) {
+                alert("대기열 취소 완료!");
+                setIsWaiting(false);
+                setUserId('');
+                setRanking(null);
+                setShowButton(false);
+                setConfirmed(false);
+            } else {
+                throw new Error("취소 실패");
+            }
+        } catch (err) {
+            alert(err.message);
+        }
+    };
+
+    const validationTokenCheck = async () => {
+        try {
+            const res = await fetch(`${serverURL}/user/cancel?user_id=${userId}&queueType=reserve`, {
+                method: 'DELETE',
+            });
+
+            if (res.ok) {
+                alert("대기열 취소 완료!");
+                setIsWaiting(false);
+                setUserId('');
+                setRanking(null);
+                setShowButton(false);
+                setConfirmed(false);
+            } else {
+                throw new Error("취소 실패");
+            }
+        } catch (err) {
+            alert(err.message);
+        }
+    }
+
+    useEffect(() => {
+        if (!isWaiting || !userId) return;
+
+        const sse = new EventSource(`${serverURL}/queue/stream?userId=${userId}&queueType=reserve`);
+
+        sse.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+
+                if (data.event === 'update') {
+                    setRanking(data.rank);
+                } else if (data.event === 'confirmed') {
+                    localStorage.setItem("user_id", data.user_id);
+
+                    fetch(`${serverURL}/user/createCookie?queueType=reserve&user_id=${data.user_id}`, {
+                        method: 'GET',
+                        credentials: 'include' // 쿠키를 받기 위해 필요
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error("쿠키 발급 실패");
+                        }
+                
+                        // 쿠키 발급 성공 후 이동
+                        setConfirmed(true);
+                        navigate('/target-page');
+                        sse.close();
+                    })
+                    .catch(error => {
+                        console.error("토큰 발급 중 오류 발생:", error);
+                        alert("서버 오류로 이동할 수 없습니다.");
+                    });
+                }
+            } catch (e) {
+                console.warn('SSE 데이터 파싱 실패:', event.data);
+            }
+        };
+
+        sse.onopen = () => {
+            console.log("SSE 연결 성공!");
+        };
+
+        sse.onerror = (err) => {
+            console.error('SSE 연결 오류:', err);
+            sse.close();
+        };
+
+        return () => {
+            sse.close();
+        };
+    }, [isWaiting, userId]);
+
+    useEffect(() => {
+        if (location.pathname === "/") {
+          localStorage.clear();
+        }
+      }, [location]);
+
+    if (isWaiting) {
+        return (
+            <div className="reservation-container">
+                <h2>{confirmed ? '예약이 확정되었습니다!' : '대기 중입니다...'}</h2>
+                <p>{userId}님, 순서를 기다려주세요.</p>
+                {ranking !== null && !confirmed && (
+                    <p>현재 대기 순번: <strong>{ranking}번</strong></p>
+                )}
+                {!confirmed && (
+                    <button onClick={cancelUser} className="cancel-button">
+                        취소하기
+                    </button>
+                )}
+            </div>
+        );
+    }
+
     return (
-      <div className="reservation-container">
-        <h2>대기 중입니다...</h2>
-        <p>{name}님, 순서를 기다려주세요.</p>
-        {ranking !== null && (
-          <p>현재 대기 순번: <strong>{ranking}번</strong></p>
-        )}
-        <button onClick={handleCancel} className="cancel-button">
-          취소하기
-        </button>
-      </div>
+        <div className="reservation-container">
+            <h2>대기열 프로젝트</h2>
+            <input
+                type="text"
+                placeholder="숫자 ID를 입력하세요"
+                value={userId}
+                onChange={handleChange}
+                className="reservation-input"
+            />
+            {showButton && (
+                <button onClick={registerUser} className="reservation-button">
+                    예약하기
+                </button>
+            )}
+        </div>
     );
-  }
-
-  return (
-    <div className="reservation-container">
-      <h2>대기열 프로젝트</h2>
-      <input
-        type="text"
-        placeholder="숫자 ID를 입력하세요"
-        value={name}
-        onChange={handleChange}
-        className="reservation-input"
-      />
-      {showButton && (
-        <button onClick={handleReservation} className="reservation-button">
-          예약하기
-        </button>
-      )}
-    </div>
-  );
 };
 
 export default Home;
