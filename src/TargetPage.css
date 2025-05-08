@@ -1,0 +1,44 @@
+.target-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f3f4f6;
+  }
+  
+  .target-box {
+    background-color: white;
+    padding: 2rem;
+    border-radius: 1.5rem;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    text-align: center;
+  }
+  
+  .target-title {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #2563eb;
+    margin-bottom: 1rem;
+  }
+  
+  .target-text {
+    color: #4b5563;
+    font-size: 1.125rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .back-button {
+    background-color: #3b82f6;
+    color: white;
+    padding: 0.5rem 1.5rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 0.75rem;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  
+  .back-button:hover {
+    background-color: #2563eb;
+  }
+  
