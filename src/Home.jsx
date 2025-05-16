@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import clock from './clock.png';
 import './Home.css';
 
 const serverURL = 'http://localhost:8080';
@@ -10,16 +11,13 @@ const Home = () => {
     const [isWaiting, setIsWaiting] = useState(false);
     const [ranking, setRanking] = useState(null);
     const [confirmed, setConfirmed] = useState(false);
-    const navigate = useNavigate()
+    const navigate = useNavigate();
     const location = useLocation();
 
-    // 숫자만 입력하도록 ( 임시 )
     const handleChange = (e) => {
         const value = e.target.value;
-        if (/^\d*$/.test(value)) {
-            setUserId(value);
-            setShowButton(value.trim().length > 0);
-        }
+        setUserId(value);
+        setShowButton(value.trim().length > 0);
     };
 
     const registerUser = async () => {
@@ -31,9 +29,11 @@ const Home = () => {
                 method: 'POST',
             });
 
-            if (!res.ok) throw new Error("이미 등록된 사용자이거나 오류 발생");
+            if (!res.ok) throw new Error("이미 대기 중이거나 예약이 진행 중인 사용자입니다");
             alert(`${userId}님, 대기열 등록 완료!`);
             setIsWaiting(true);
+            localStorage.setItem("user_id", userId); // 저장
+            localStorage.setItem("is_waiting", "true");
         } catch (err) {
             alert(err.message);
         }
@@ -55,6 +55,7 @@ const Home = () => {
                 setRanking(null);
                 setShowButton(false);
                 setConfirmed(false);
+                localStorage.clear(); // 초기화
             } else {
                 throw new Error("취소 실패");
             }
@@ -63,26 +64,14 @@ const Home = () => {
         }
     };
 
-    const validationTokenCheck = async () => {
-        try {
-            const res = await fetch(`${serverURL}/user/cancel?user_id=${userId}&queueType=reserve`, {
-                method: 'DELETE',
-            });
-
-            if (res.ok) {
-                alert("대기열 취소 완료!");
-                setIsWaiting(false);
-                setUserId('');
-                setRanking(null);
-                setShowButton(false);
-                setConfirmed(false);
-            } else {
-                throw new Error("취소 실패");
-            }
-        } catch (err) {
-            alert(err.message);
+    useEffect(() => {
+        const savedId = localStorage.getItem("user_id");
+        const waiting = localStorage.getItem("is_waiting") === "true";
+        if (savedId && waiting) {
+            setUserId(savedId);
+            setIsWaiting(true);
         }
-    }
+    }, []);
 
     useEffect(() => {
         if (!isWaiting || !userId) return;
@@ -96,59 +85,74 @@ const Home = () => {
                 if (data.event === 'update') {
                     setRanking(data.rank);
                 } else if (data.event === 'confirmed') {
-                    localStorage.setItem("user_id", data.user_id);
+                    
+                    localStorage.removeItem("is_waiting"); // 확정되면 대기 상태 해제
+                    console.log("예약 페이지 이동")
 
-                    fetch(`${serverURL}/user/createCookie?queueType=reserve&user_id=${data.user_id}`, {
+                    fetch(`${serverURL}/user/createCookie?queueType=reserve&user_id=${userId}`, {
                         method: 'GET',
-                        credentials: 'include' // 쿠키를 받기 위해 필요
+                        credentials: 'include'
                     })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error("쿠키 발급 실패");
-                        }
-                
-                        // 쿠키 발급 성공 후 이동
-                        setConfirmed(true);
-                        navigate('/target-page');
-                        sse.close();
-                    })
-                    .catch(error => {
-                        console.error("토큰 발급 중 오류 발생:", error);
-                        alert("서버 오류로 이동할 수 없습니다.");
-                    });
+                        .then(response => {
+                            if (!response.ok) throw new Error("쿠키 발급 실패");
+                            setConfirmed(true);
+                            navigate('/target-page');
+                            sse.close();
+                        })
+                        .catch(error => {
+                            console.error("토큰 발급 중 오류:", error);
+                            alert("서버 오류로 이동할 수 없습니다.");
+                        });
                 }
             } catch (e) {
                 console.warn('SSE 데이터 파싱 실패:', event.data);
             }
         };
 
-        sse.onopen = () => {
-            console.log("SSE 연결 성공!");
-        };
-
+        sse.onopen = () => console.log("SSE 연결 성공!");
         sse.onerror = (err) => {
             console.error('SSE 연결 오류:', err);
             sse.close();
         };
 
+        return () => sse.close();
+    }, [isWaiting, userId]);
+
+    // 대기열에서 새로고침 시 맨 뒤로 밀리게 처리
+    useEffect(() => {
+        if (!isWaiting || !userId) return;
+
+        const handleBeforeUnload = () => {
+            navigator.sendBeacon(
+                `${serverURL}/user/reEnter?user_id=${userId}&queueType=reserve`
+            );
+            console.log("새로고침으로 인한 대기열 후순위 재배치");
+        };
+
+        window.addEventListener("beforeunload", handleBeforeUnload);
         return () => {
-            sse.close();
+            window.removeEventListener("beforeunload", handleBeforeUnload);
         };
     }, [isWaiting, userId]);
 
-    useEffect(() => {
-        if (location.pathname === "/") {
-          localStorage.clear();
-        }
-      }, [location]);
+    // useEffect(() => {
+    //     if (location.pathname === "/") {
+    //         localStorage.clear(); // 홈으로 오면 초기화
+    //     }
+    // }, [location]);
 
     if (isWaiting) {
         return (
             <div className="reservation-container">
-                <h2>{confirmed ? '예약이 확정되었습니다!' : '대기 중입니다...'}</h2>
+                <div>
+                    <img src={clock} alt="모래시계" style={{ width: '100px', height: '100px' }} />
+                </div>
+                <h2>{confirmed ? '예약이 확정되었습니다!' : '서비스 접속 대기 중입니다...'}</h2>
                 <p>{userId}님, 순서를 기다려주세요.</p>
+                <p>잠시만 기다리시면 서비스에 자동 접속됩니다.</p>
+                <h4>새로고침하면 대기 순번이 가장 뒤로 이동합니다.</h4>
                 {ranking !== null && !confirmed && (
-                    <p>현재 대기 순번: <strong>{ranking}번</strong></p>
+                    <h3 style={{ marginTop: "30px" }}>현재 대기 순번: <strong>{ranking}번</strong></h3>
                 )}
                 {!confirmed && (
                     <button onClick={cancelUser} className="cancel-button">
@@ -164,7 +168,7 @@ const Home = () => {
             <h2>대기열 프로젝트</h2>
             <input
                 type="text"
-                placeholder="숫자 ID를 입력하세요"
+                placeholder="유저 ID를 입력해주세요"
                 value={userId}
                 onChange={handleChange}
                 className="reservation-input"
