@@ -44,11 +44,12 @@ const Home = () => {
         if (!confirm) return;
 
         try {
-            const res = await fetch(`${serverURL}/user/cancel?user_id=${userId}&queueType=reserve`, {
+            const res = await fetch(`${serverURL}/user/cancel?user_id=${userId}&queueType=reserve&queueCategory=wait`, {
                 method: 'DELETE',
             });
 
             if (res.ok) {
+                console.log(userId + "님 대기열 삭제 완료")
                 alert("대기열 취소 완료!");
                 setIsWaiting(false);
                 setUserId('');
@@ -135,12 +136,6 @@ const Home = () => {
         };
     }, [isWaiting, userId]);
 
-    // useEffect(() => {
-    //     if (location.pathname === "/") {
-    //         localStorage.clear(); // 홈으로 오면 초기화
-    //     }
-    // }, [location]);
-
     if (isWaiting) {
         return (
             <div className="reservation-container">
@@ -168,7 +163,7 @@ const Home = () => {
             <h2>대기열 프로젝트</h2>
             <input
                 type="text"
-                placeholder="유저 ID를 입력해주세요"
+                placeholder="예약명을 입력해주세요"
                 value={userId}
                 onChange={handleChange}
                 className="reservation-input"

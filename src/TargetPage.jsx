@@ -5,7 +5,7 @@ import './TargetPage.css'
 
 const TargetPage = () => {
     const navigate = useNavigate()
-    const [secondsLeft, setSecondsLeft] = useState(600) // 10분
+    const [secondsLeft, setSecondsLeft] = useState(600)
 
     const minutes = Math.floor(secondsLeft / 60)
     const seconds = secondsLeft % 60
@@ -15,21 +15,28 @@ const TargetPage = () => {
         return match ? match[2] : null
     }
 
+
     useEffect(() => {
         const expireTime = localStorage.getItem('expireTime')
         const user_id = localStorage.getItem('user_id')
-
+    
         if (!expireTime) {
-            localStorage.removeItem('expireTime')
-            const newExpire = Date.now() + 100_000
+            const newExpire = Date.now() + 600_000
             localStorage.setItem('expireTime', newExpire.toString())
         }
-
+    
+        // 렌더링 직후 실제 남은 시간 계산
+        const current = Date.now()
+        const expire = parseInt(localStorage.getItem('expireTime') || '0', 10)
+        const diff = Math.floor((expire - current) / 1000)
+        
+        setSecondsLeft(diff > 0 ? diff : 0)
+    
         const interval = setInterval(() => {
-            const current = Date.now()
-            const expire = parseInt(localStorage.getItem('expireTime') || '0', 10)
-            const diff = Math.floor((expire - current) / 1000)
-
+            const now = Date.now()
+            const expireTime = parseInt(localStorage.getItem('expireTime') || '0', 10)
+            const diff = Math.floor((expireTime - now) / 1000)
+    
             if (diff <= 0) {
                 clearInterval(interval)
                 localStorage.removeItem('expireTime')
@@ -39,7 +46,7 @@ const TargetPage = () => {
                 setSecondsLeft(diff)
             }
         }, 1000)
-
+    
         return () => clearInterval(interval)
     }, [navigate])
 
@@ -88,16 +95,16 @@ const TargetPage = () => {
     const removeAllowUser = async (remove_user_id) => {
 
         try {
-            const res = await fetch(`http://localhost:8080/user/remove/allow?user_id=${encodeURIComponent(remove_user_id)}&queueType=reserve`, {
+            const res = await fetch(`http://localhost:8080/user/cancel?user_id=${remove_user_id}&queueType=reserve&queueCategory=allow`, {
                 method: 'DELETE',
             });
 
-            console.log(" encode remove_user_id : " + encodeURIComponent(remove_user_id))
+            console.log(" encode remove_user_id : " + remove_user_id)
 
             if (res.ok) {
-                console.log("허용큐 사용자 제거 완료 : " + remove_user_id)
+                console.log("참가열 사용자 제거 완료 : " + remove_user_id)
             } else {
-                throw new Error("삭제 실패");
+                throw new Error("대기열 삭제 실패");
             }
         } catch (err) {
             alert(err.message);
