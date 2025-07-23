@@ -24,12 +24,15 @@ const Home = () => {
         const confirm = window.confirm("대기열에서 참여하시겠습니까 ?");
         if (!confirm) return;
 
+        const enterTimestamp = Date.now();
+        
         try {
-            const res = await fetch(`${serverURL}/user/enter?user_id=${userId}&queueType=reserve`, {
+            const res = await fetch(`${serverURL}/user/enter?user_id=${userId}&queueType=reserve&enterTimestamp=${enterTimestamp}`, {
                 method: 'POST',
             });
 
             if (!res.ok) throw new Error("이미 대기 중이거나 예약이 진행 중인 사용자입니다");
+
             alert(`${userId}님, 대기열 등록 완료!`);
             setIsWaiting(true);
             localStorage.setItem("user_id", userId); // 저장
@@ -75,27 +78,50 @@ const Home = () => {
     }, []);
 
     useEffect(() => {
-        if (!isWaiting || !userId) return;
+        if (!isWaiting || !userId || confirmed) return;
 
+        // EventSource : 서버 ➝ 클라이언트으로 데이터를 실시간으로 받아오는 기술, 서버와 SSE 연결을 시작
+        // /queue/stream : 클라이언트가 서버와 SSE 연결을 맺기 위해 접속하는 URL 경로
+        // 이 경로에서 서버는 Content-Type: text/event-stream 헤더를 사용하여 실시간으로 클라이언트에 데이터를 전송
         const sse = new EventSource(`${serverURL}/queue/stream?userId=${userId}&queueType=reserve`);
+
+        sse.onopen = () => console.log("SSE 연결 성공!");
+
+        sse.onerror = (err) => {
+            console.error('SSE 연결 오류:', err);
+            sse.close();
+        };
 
         sse.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
 
+                if (data.event === 'error') {
+                    console.log(data.message)
+                    alert(data.message || "대기열 정보가 없습니다. 다시 시도해주세요.");
+                    sse.close();
+                }
+
+                // 'update' : 대기열 순위 변동일 떄
                 if (data.event === 'update') {
                     setRanking(data.rank);
+                    console.log("대기 순위 변동 : " + data.rank)
+
+                // 'confirmed' : 참가열로 이동했을 때
                 } else if (data.event === 'confirmed') {
+                    console.log("참가열 이동 사용자 : " + data.user_id)
                     
-                    localStorage.removeItem("is_waiting"); // 확정되면 대기 상태 해제
+                    localStorage.removeItem("is_waiting"); 
                     console.log("예약 페이지 이동")
 
+                    // 쿠키 생성해서 타겟 페이지로 이동
                     fetch(`${serverURL}/user/createCookie?queueType=reserve&user_id=${userId}`, {
                         method: 'GET',
                         credentials: 'include'
                     })
                         .then(response => {
                             if (!response.ok) throw new Error("쿠키 발급 실패");
+
                             setConfirmed(true);
                             navigate('/target-page');
                             sse.close();
@@ -110,13 +136,8 @@ const Home = () => {
             }
         };
 
-        sse.onopen = () => console.log("SSE 연결 성공!");
-        sse.onerror = (err) => {
-            console.error('SSE 연결 오류:', err);
-            sse.close();
-        };
-
         return () => sse.close();
+
     }, [isWaiting, userId]);
 
     // 대기열에서 새로고침 시 맨 뒤로 밀리게 처리
